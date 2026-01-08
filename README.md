@@ -53,6 +53,6 @@ This project is considered successful if the system can:
 
 The emphasis is on building a **reliable analytical foundation** that can be extended with more advanced models, feature engineering, or evaluation techniques over time.
 
-rather than traditional static data pipelines.
+## Pipeline Overview
 <img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/c8221038-2b2f-4c4d-a3af-bf918c96c4de" />
 
