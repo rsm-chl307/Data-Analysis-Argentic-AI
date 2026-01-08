@@ -30,3 +30,5 @@ This repository is designed to demonstrate:
 - LLM-driven analytical decision making  
 
 rather than traditional static data pipelines.
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/c8221038-2b2f-4c4d-a3af-bf918c96c4de" />
+
