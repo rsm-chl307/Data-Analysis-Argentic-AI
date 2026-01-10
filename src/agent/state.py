@@ -1,0 +1,17 @@
+from __future__ import annotations
+from typing import TypedDict, List, Dict, Any
+
+
+class AgentState(TypedDict, total=False):
+    # Inputs
+    question: str
+    csv_path: str
+
+    # Planner output
+    plan: List[str]
+
+    # Tool output
+    tool_result: Dict[str, Any]
+
+    # Final output
+    final_answer: str
