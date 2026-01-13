@@ -10,4 +10,4 @@ def get_gemini_api_key() -> str:
     return key
 
 def get_gemini_model_name() -> str:
-    return os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
