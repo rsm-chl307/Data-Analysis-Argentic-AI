@@ -12,7 +12,7 @@ def interpreter_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str
     """
     system = (
         "You are a business analyst. Use the tool_result as ground truth. "
-        "Write a clear, concise answer in Traditional Chinese. "
+        "Write a clear, concise answer in English. "
         "If a ranked table exists, summarize the top item and key comparisons."
     )
     user = (

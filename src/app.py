@@ -22,8 +22,8 @@ def main():
     graph = build_graph(llm)
 
     # Phase 1: fixed demo inputs
-    csv_path = "data/samples/demo.csv"
-    question = "Which channel has the highest average revenue and why?"
+    csv_path = "data/samples/red wine/winequality-red.csv"
+    question = "Which chemical properties have the strongest impact on red wine quality, and in which direction do they influence it?"
 
     result = graph.invoke({"csv_path": csv_path, "question": question})
 
