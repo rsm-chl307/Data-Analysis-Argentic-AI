@@ -11,8 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 import pandas as pd
-import os
-import inspect
+import re
 
 def _numeric_parseable_rate(s: pd.Series) -> float:
     """
@@ -29,15 +28,18 @@ def _numeric_parseable_rate(s: pd.Series) -> float:
     parsed = pd.to_numeric(non_null.astype(str).str.replace(",", "", regex=False), errors="coerce")
     return float(parsed.notna().mean())
 
-
 def _is_id_like(col_name: str, s: pd.Series, n_rows: int) -> bool:
     """
     Heuristic to flag ID-like columns.
-    """
-    name = col_name.lower()
 
-    # Strong name-based signals
-    if any(k in name for k in ["id", "uuid", "guid", "hash"]):
+    Fix:
+    - Avoid substring matches like 'acid' -> 'id'
+    - Use token / boundary-based matching instead
+    """
+    name = str(col_name).lower()
+
+    # match id-like tokens only (id, user_id, customer-id, etc.)
+    if re.search(r'(^|[_\-\s])(id|uuid|guid|hash)([_\-\s]|$)', name):
         return True
 
     # Numeric continuous variables should NOT be treated as IDs
@@ -51,7 +53,7 @@ def _is_id_like(col_name: str, s: pd.Series, n_rows: int) -> bool:
     nunique = int(non_null.nunique())
     unique_ratio = nunique / max(1, len(non_null))
 
-    # High uniqueness for non-numeric columns likely indicates identifiers or free text
+    # High uniqueness for non-numeric columns
     if unique_ratio >= 0.98 and len(non_null) >= 50:
         return True
 
@@ -86,9 +88,6 @@ def profile_schema(
     """
     Produce a JSON-serializable schema summary for planner/LLM/tool routing.
     """
-    print("[DEBUG] USING profiling.py:", os.path.abspath(__file__))
-    print("[DEBUG] _is_id_like starts at line:",
-            inspect.getsourcelines(_is_id_like)[1])
     n_rows, n_cols = df.shape
     cols = list(df.columns)
 
