@@ -20,7 +20,6 @@ def tool_node(state: AgentState) -> Dict[str, Any]:
         question = state["question"]
 
         df, meta = load_dataset(csv_path)
-        state["df"] = df  # runtime only
 
         tool_result: Dict[str, Any] = {}
         tool_result["dataset_meta"] = meta.to_dict()
@@ -38,7 +37,8 @@ def tool_node(state: AgentState) -> Dict[str, Any]:
             question=question,
         )
 
-        return {"tool_result": tool_result}
+        # IMPORTANT: return df so planner_node can access it from state
+        return {"tool_result": tool_result, "df": df}
 
     except DataLoadError as e:
         return {
@@ -46,4 +46,3 @@ def tool_node(state: AgentState) -> Dict[str, Any]:
                 "error": {"message": str(e), "payload": e.payload}
             }
         }
-

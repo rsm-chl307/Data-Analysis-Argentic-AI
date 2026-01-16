@@ -5,6 +5,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import AgentState
 from ...tools.target_rerank_llm import rerank_target_candidates_with_llm
+from ...tools.task_type_inference import infer_task_type  # <<< ADD (2.2.3)
 
 
 def _should_rerank_with_llm(question: str, candidates: List[Dict[str, Any]]) -> Tuple[bool, List[str]]:
@@ -53,6 +54,9 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
     Phase 2.2.2 (in planner): optionally re-rank heuristic target candidates using LLM,
     gated by deterministic uncertainty rules. If rerank is not triggered or fails,
     fall back to the heuristic top candidate.
+
+    Phase 2.2.3 (added): infer supervised task type from selected target (rules-only).
+    Writes back into tool_result: task_type + task_type_inference payload.
     """
     question = state["question"]
     tool_result = state.get("tool_result", {}) or {}
@@ -77,7 +81,23 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
         )
         selected_target = rerank_payload.get("final_target") or heuristic_top
 
-    # Keep your original "plan generation" behavior (but now include the selected target)
+    # -------------------------
+    # Phase 2.2.3: task type inference (rules-only, cheap)
+    # -------------------------
+    df = state.get("df")  # tool_node sets this (runtime only)
+    task_type_payload = None
+    if df is not None:
+        task_type_payload = infer_task_type(df, selected_target)
+
+    # Merge back into existing tool_result (do NOT overwrite other keys)
+    merged_tool_result = dict(tool_result)
+    if task_type_payload is not None:
+        merged_tool_result["task_type"] = task_type_payload.get("task_type")
+        merged_tool_result["task_type_inference"] = task_type_payload
+
+    # -------------------------
+    # Plan generation (keep your original behavior)
+    # -------------------------
     system = (
         "You are a data analysis planner. "
         "Return a short step-by-step plan (2-4 steps) to answer the user's question using pandas. "
@@ -102,8 +122,11 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
             "gate_reasons": gate_reasons,
             "heuristic_top": heuristic_top,
         },
+        # IMPORTANT: keep tool_result updated with task_type info
+        "tool_result": merged_tool_result,
     }
     if rerank_payload is not None:
         out["target_rerank"] = rerank_payload
 
     return out
+
