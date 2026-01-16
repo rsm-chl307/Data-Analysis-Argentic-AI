@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TypedDict, List, Dict, Any, Optional
 import pandas as pd
-
+df: pd.DataFrame
 
 class AgentState(TypedDict, total=False):
     # Inputs

@@ -1,11 +1,12 @@
 from __future__ import annotations
 from typing import Dict, Any, List, Tuple
+from dataclasses import asdict
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..state import AgentState
 from ...tools.target_rerank_llm import rerank_target_candidates_with_llm
-from ...tools.task_type_inference import infer_task_type  # <<< ADD (2.2.3)
+from ...tools.task_type_inference import infer_task_type  # Phase 2.2.3
 
 
 def _should_rerank_with_llm(question: str, candidates: List[Dict[str, Any]]) -> Tuple[bool, List[str]]:
@@ -82,9 +83,9 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
         selected_target = rerank_payload.get("final_target") or heuristic_top
 
     # -------------------------
-    # Phase 2.2.3: task type inference (rules-only, cheap)
+    # Phase 2.2.3: task type inference (rules-only)
     # -------------------------
-    df = state.get("df")  # tool_node sets this (runtime only)
+    df = state.get("df")  # tool_node must return {"df": df}
     task_type_payload = None
     if df is not None:
         task_type_payload = infer_task_type(df, selected_target)
@@ -92,11 +93,12 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
     # Merge back into existing tool_result (do NOT overwrite other keys)
     merged_tool_result = dict(tool_result)
     if task_type_payload is not None:
-        merged_tool_result["task_type"] = task_type_payload.get("task_type")
-        merged_tool_result["task_type_inference"] = task_type_payload
+        payload_dict = asdict(task_type_payload)  # dataclass -> dict (JSON-friendly)
+        merged_tool_result["task_type"] = payload_dict["task_type"]
+        merged_tool_result["task_type_inference"] = payload_dict
 
     # -------------------------
-    # Plan generation (keep your original behavior)
+    # Plan generation (keep original behavior)
     # -------------------------
     system = (
         "You are a data analysis planner. "
@@ -125,6 +127,7 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
         # IMPORTANT: keep tool_result updated with task_type info
         "tool_result": merged_tool_result,
     }
+
     if rerank_payload is not None:
         out["target_rerank"] = rerank_payload
 
