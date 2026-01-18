@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Any, List, Tuple
 from dataclasses import asdict
+import re
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -48,6 +49,27 @@ def _should_rerank_with_llm(question: str, candidates: List[Dict[str, Any]]) -> 
     return (len(reasons) > 0), reasons
 
 
+def _extract_tool_tags_from_plan(plan_lines: List[str]) -> List[str]:
+    """
+    Deterministic parser for planner tool tags.
+
+    Planner is instructed to include tool tags in each step using the syntax:
+      [TOOL:correlation], [TOOL:baseline_model], [TOOL:plot], etc.
+
+    This helper extracts unique tool names (lowercased) from the plan lines.
+    The downstream analysis_node should use these tags for deterministic gating
+    (i.e., if 'correlation' in plan_tools => run correlation).
+    """
+    tags = []
+    tag_re = re.compile(r"\[TOOL:([a-zA-Z0-9_+-]+)\]", flags=re.IGNORECASE)
+    for line in plan_lines:
+        for m in tag_re.finditer(line):
+            tag = m.group(1).lower()
+            if tag not in tags:
+                tags.append(tag)
+    return tags
+
+
 def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, Any]:
     """
     Produce an analysis plan and select a target variable.
@@ -58,6 +80,12 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
 
     Phase 2.2.3 (added): infer supervised task type from selected target (rules-only).
     Writes back into tool_result: task_type + task_type_inference payload.
+
+    NOTE (planner tag behavior):
+    The planner is asked to annotate each plan step with a tool tag in the form:
+      [TOOL:correlation], [TOOL:baseline_model], [TOOL:plot], ...
+    These tags are machine-readable signals (not free-form text) used by the
+    analysis_node to deterministically decide which tools to execute.
     """
     question = state["question"]
     tool_result = state.get("tool_result", {}) or {}
@@ -87,7 +115,7 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
     # -------------------------
     df = state.get("df")  # tool_node must return {"df": df}
     task_type_payload = None
-    if df is not None:
+    if df is not None and selected_target:
         task_type_payload = infer_task_type(df, selected_target)
 
     # Merge back into existing tool_result (do NOT overwrite other keys)
@@ -98,12 +126,18 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
         merged_tool_result["task_type_inference"] = payload_dict
 
     # -------------------------
-    # Plan generation (keep original behavior)
+    # Plan generation (updated to request tool tags)
     # -------------------------
+    # The system prompt instructs the planner to include machine-readable tool tags
+    # next to steps. These tags are the bridge between LLM intent and deterministic
+    # execution: the analysis node will parse them and decide which tools to run.
     system = (
         "You are a data analysis planner. "
         "Return a short step-by-step plan (2-4 steps) to answer the user's question using pandas. "
-        "Keep steps concise and actionable."
+        "For each step, include a short natural-language instruction and, if relevant, "
+        "append a tool tag in the exact format [TOOL:<tool_name>] (examples: [TOOL:correlation], "
+        "[TOOL:baseline_model], [TOOL:plot]).\n"
+        "Keep steps concise and actionable. Do NOT invent new tools beyond the examples."
     )
     user = (
         f"Question: {question}\n"
@@ -112,11 +146,17 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
     )
 
     msg = llm.invoke([("system", system), ("user", user)]).content
+
+    # Turn the LLM response into clean plan lines
     plan: List[str] = [line.strip("-• ").strip() for line in msg.splitlines() if line.strip()]
     plan = plan[:4] if plan else ["Load the dataset", "Compute relevant summary stats", "Answer the question"]
 
+    # Parse tool tags from the plan deterministically
+    plan_tools: List[str] = _extract_tool_tags_from_plan(plan)
+
     out: Dict[str, Any] = {
         "plan": plan,
+        "plan_tools": plan_tools,  # machine-readable list of requested tools (lowercased)
         "target": selected_target,
         "target_selection": {
             "selected_target": selected_target,
@@ -132,4 +172,5 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
         out["target_rerank"] = rerank_payload
 
     return out
+
 
