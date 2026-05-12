@@ -1,0 +1,18 @@
+.
+├── data/                  # 測試數據集 (如 Red Wine, Titanic)
+├── src/
+│   ├── agent/
+│   │   ├── graph.py       # 定義 LangGraph 的節點連接與工作流 (目前為線性)
+│   │   ├── state.py       # 定義 AgentState，管控資料在節點間的傳遞
+│   │   └── nodes/
+│   │       ├── planner.py     # 【大腦】負責推理、LLM 預算控制、產出 Tool Tags
+│   │       ├── analysis.py    # 【手腳】解析 Tool Tags 並執行對應的資料分析工具
+│   │       ├── tool.py        # 【感知】負責讀取 CSV 並進行初始的 Data Profiling
+│   │       └── interpreter.py # 【嘴巴】將分析數據轉化為人類可讀的商業結論
+│   ├── config.py          # 系統設定檔
+│   └── tools/             # Agent 可呼叫的獨立技能庫
+│       ├── correlation.py         # 計算皮爾森相關係數
+│       ├── target_rerank_llm.py   # 使用 LLM 進行預測標的的語義重排
+│       ├── task_type_inference.py # 根據欄位特徵推斷任務類型 (分類/迴歸)
+│       └── public_view.py         # 數據過濾器，隔離工程 Log 與對外展示數據
+└── requirements.txt
