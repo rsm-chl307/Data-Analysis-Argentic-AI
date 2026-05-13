@@ -3,7 +3,7 @@ File: src/agent/nodes/planner.py
 Task: Acts as the "Brain" (Project Manager) of the agent. It determines the target variable, 
 infers the task type, and generates a step-by-step analysis plan with machine-readable tool tags.
 With the cyclic graph upgrade, it also reviews the 'error_log' to reflect on previous failures 
-and adjust its planning strategy accordingly (Self-Correction).
+and adjust its planning strategy accordingly.
 """
 
 from __future__ import annotations

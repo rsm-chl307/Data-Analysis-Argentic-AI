@@ -1,3 +1,11 @@
+"""
+File: src/agent/nodes/analysis.py
+Mission: Acts as the "Hands" of the agent. It executes data analysis tools (like correlation)
+based on the planner's instructions. Crucially, in the cyclic graph architecture, 
+it acts as an error reporter: if execution fails, it logs the error to the 'error_log' 
+and increments the 'retry_count' to trigger the Planner's self-correction mechanism.
+"""
+
 from __future__ import annotations
 from typing import Dict, Any, List
 
@@ -55,12 +63,25 @@ def analysis_node(state: AgentState) -> Dict[str, Any]:
     """
     df = state.get("df")
     if df is None or not isinstance(df, pd.DataFrame):
+        error_msg = "analysis_node: missing df in state"
         merged = _merge_tool_result(
             state,
-            {"error": {"message": "analysis_node: missing df in state", "payload": {}}},
+            {"error": {"message": error_msg, "payload": {}}},
         )
         merged["public_tool_result"] = make_public_tool_result(merged)
-        return {"tool_result": merged}
+        
+        # -------------------------
+        # ERROR REPORTING LOGIC (NEW)
+        # Update memory for cyclic error recovery
+        # -------------------------
+        current_log = state.get("error_log", [])
+        new_retry_count = state.get("retry_count", 0) + 1
+        
+        return {
+            "tool_result": merged,
+            "error_log": current_log + [error_msg],
+            "retry_count": new_retry_count
+        }
 
     # determine selected target (planner should set this)
     target = state.get("target")
@@ -69,12 +90,25 @@ def analysis_node(state: AgentState) -> Dict[str, Any]:
         target = ts.get("selected_target")
 
     if not target:
+        error_msg = "analysis_node: missing selected target"
         merged = _merge_tool_result(
             state,
-            {"error": {"message": "analysis_node: missing selected target", "payload": {}}},
+            {"error": {"message": error_msg, "payload": {}}},
         )
         merged["public_tool_result"] = make_public_tool_result(merged)
-        return {"tool_result": merged}
+        
+        # -------------------------
+        # ERROR REPORTING LOGIC (NEW)
+        # Update memory for cyclic error recovery
+        # -------------------------
+        current_log = state.get("error_log", [])
+        new_retry_count = state.get("retry_count", 0) + 1
+        
+        return {
+            "tool_result": merged,
+            "error_log": current_log + [error_msg],
+            "retry_count": new_retry_count
+        }
 
     tool_result = state.get("tool_result", {}) or {}
     task_type = tool_result.get("task_type")
@@ -130,4 +164,5 @@ def analysis_node(state: AgentState) -> Dict[str, Any]:
     merged = _merge_tool_result(state, updates)
     merged["public_tool_result"] = make_public_tool_result(merged)
 
+    # If execution succeeds, we simply return the updated tool_result
     return {"tool_result": merged}
