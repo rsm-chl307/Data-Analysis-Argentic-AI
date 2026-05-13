@@ -1,3 +1,11 @@
+"""
+File: src/agent/nodes/planner.py
+Task: Acts as the "Brain" (Project Manager) of the agent. It determines the target variable, 
+infers the task type, and generates a step-by-step analysis plan with machine-readable tool tags.
+With the cyclic graph upgrade, it also reviews the 'error_log' to reflect on previous failures 
+and adjust its planning strategy accordingly (Self-Correction).
+"""
+
 from __future__ import annotations
 from typing import Dict, Any, List, Tuple
 from dataclasses import asdict
@@ -89,6 +97,9 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
     """
     question = state["question"]
     tool_result = state.get("tool_result", {}) or {}
+    
+    # FETCH ERROR LOG: Retrieve past errors for reflection
+    error_log = state.get("error_log", [])
 
     schema_summary = tool_result.get("schema_summary")
     target_info = tool_result.get("target_candidates") or {}
@@ -139,11 +150,26 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
         "[TOOL:baseline_model], [TOOL:plot]).\n"
         "Keep steps concise and actionable. Do NOT invent new tools beyond the examples."
     )
+    
     user = (
         f"Question: {question}\n"
         f"Selected target column: {selected_target}\n"
-        f"Note: If target is None, propose how to identify it from the dataset."
+        f"Note: If target is None, propose how to identify it from the dataset.\n"
     )
+
+    # -------------------------
+    # SELF-CORRECTION LOGIC (NEW)
+    # Inject past errors into the prompt so the LLM can learn and adapt
+    # -------------------------
+    if error_log:
+        error_str = "\n".join([f"- {err}" for err in error_log])
+        user += (
+            f"\n=== CRITICAL: PREVIOUS EXECUTION ERRORS ===\n"
+            f"You previously generated a plan, but it failed during execution with the following errors:\n"
+            f"{error_str}\n"
+            f"You MUST reflect on these errors. Provide a DIFFERENT plan, use DIFFERENT tool tags, "
+            f"or select a DIFFERENT approach to avoid repeating the same mistake."
+        )
 
     msg = llm.invoke([("system", system), ("user", user)]).content
 
@@ -172,5 +198,4 @@ def planner_node(state: AgentState, llm: ChatGoogleGenerativeAI) -> Dict[str, An
         out["target_rerank"] = rerank_payload
 
     return out
-
 
