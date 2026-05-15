@@ -26,21 +26,28 @@ def route_after_tool(state: AgentState) -> Literal["planner", "interpreter"]:
 def route_after_analysis(state: AgentState) -> Literal["planner", "interpreter"]:
     """
     Determines the next step after the analysis_node execution.
-    This is the core of the error recovery cycle (Cyclic Logic).
-    If an error occurs and the retry limit is not reached, it routes back to the planner.
-    If successful or the retry limit is exceeded, it routes to the interpreter.
+    Checks for both top-level errors and nested tool-specific errors 
+    to trigger the self-correction loop.
     """
     tool_result = state.get("tool_result", {})
     retry_count = state.get("retry_count", 0)
     
-    # Check if the analysis step encountered an error
-    if "error" in tool_result:
-        # Prevent infinite loops by checking the retry counter
+    # 1. Check for top-level errors (e.g., missing dataframe or target)
+    has_error = "error" in tool_result
+    
+    # 2. Check for nested errors inside specific tool executions (Silent Failures)
+    # Example: tool_result = {"correlation": {"error": {"message": "..."}}}
+    if not has_error:
+        for key, value in tool_result.items():
+            if isinstance(value, dict) and "error" in value:
+                has_error = True
+                break
+                
+    # 3. Route based on the error state and retry limits
+    if has_error:
         if retry_count < 3:
-            return "planner"
+            return "planner"      # Trigger self-correction loop
         else:
-            # If we retried 3 times and still failed, give up and report to user
-            return "interpreter"
+            return "interpreter"  # Max retries reached, proceed to final report
             
-    # If no error, proceed to generate the final answer
-    return "interpreter"
+    return "interpreter"          # Success, proceed to final report
